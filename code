@@ -1,0 +1,76 @@
+REPORT ZSB_READ_XML_FROM_HTTP.
+
+
+DATA: BEGIN OF GT_HEADER OCCURS 0,
+  COLUMN_NAME(40),
+  END OF GT_HEADER.
+
+DATA: XML_TABLE   TYPE STRING,
+      XML_DATA    TYPE XSTRING,
+      XML_SIZE    TYPE I,
+      XML_RESULT  TYPE TABLE OF SMUM_XMLTB WITH HEADER LINE,
+      HTTP_CLIENT TYPE REF TO IF_HTTP_CLIENT,
+      RETURN      LIKE TABLE OF BAPIRET2.
+
+DATA: GV_FILENAME TYPE STRING.
+
+CALL METHOD CL_HTTP_CLIENT=>CREATE_BY_URL
+  EXPORTING
+    URL    = 'http://www.tcmb.gov.tr/kurlar/today.xml'
+  IMPORTING
+    CLIENT = HTTP_CLIENT.
+
+HTTP_CLIENT->SEND( ).
+HTTP_CLIENT->RECEIVE( ).
+
+CLEAR XML_TABLE.
+XML_TABLE = HTTP_CLIENT->RESPONSE->GET_CDATA( ).
+HTTP_CLIENT->CLOSE( ).
+
+CALL FUNCTION 'SCMS_STRING_TO_XSTRING'
+   EXPORTING
+    TEXT   = XML_TABLE
+  IMPORTING
+    BUFFER = XML_DATA
+  EXCEPTIONS
+    FAILED = 1
+    OTHERS = 2.
+
+CALL FUNCTION 'SMUM_XML_PARSE'
+  EXPORTING
+    XML_INPUT = XML_DATA
+  TABLES
+    XML_TABLE = XML_RESULT
+    RETURN    = RETURN.
+
+ PERFORM GET_FILE.
+* PERFORM BUILD_HEADER.
+
+CALL FUNCTION 'GUI_DOWNLOAD'
+  EXPORTING
+   FILENAME                        = GV_FILENAME
+   FILETYPE                         = 'ASC'
+   WRITE_FIELD_SEPARATOR            = 'I'
+  TABLES
+    DATA_TAB                        = XML_RESULT.
+*    FIELDNAMES                     = GT_HEADER.
+
+*&---------------------------------------------------------------------*
+*&      Form  GET_FILE
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM GET_FILE .
+CLEAR GV_FILENAME.
+
+DATA: LV_DESKTOP TYPE STRING.
+
+CALL METHOD CL_GUI_FRONTEND_SERVICES=>GET_DESKTOP_DIRECTORY
+  CHANGING
+    DESKTOP_DIRECTORY  =  LV_DESKTOP.
+CALL METHOD CL_GUI_CFW=>FLUSH.
+CONCATENATE LV_DESKTOP '\exceldata.csv' INTO GV_FILENAME.
+ENDFORM.
